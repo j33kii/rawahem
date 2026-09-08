@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>بوابة الموظفين | جمعية رواحم</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --bg:#FAF7F1; --surface:#FFFFFF; --ink:#1C2321; --ink-soft:#5B655F;
+  --primary:#1F4B43; --primary-dark:#153631; --primary-soft:#E7EFEC;
+  --accent:#C89B3C; --accent-soft:#F6EDD8;
+  --border:#E3DECF;
+  --danger:#B4483A; --danger-soft:#F7E7E3;
+  --warn:#C9862B; --warn-soft:#F8ECD9;
+  --success:#3F7D5C; --success-soft:#E7F1EA;
+  --info:#3B6E8F; --info-soft:#E6EEF2;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; direction:rtl;}
+button,input,select,textarea{font-family:inherit; font-size:15px;}
+h1,h2,h3,h4{margin:0; font-weight:800;}
+p{margin:0;}
+.hidden{display:none !important;}
+
+#loginScreen{min-height:100vh; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 15% 20%, rgba(31,75,67,0.08), transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(200,155,60,0.10), transparent 40%), var(--bg); padding:20px;}
+.login-card{background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:38px 30px; width:100%; max-width:380px; box-shadow:0 18px 40px -20px rgba(31,75,67,0.35);}
+.brand{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
+.brand-mark{width:46px; height:46px; border-radius:12px; background:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.brand-title{font-size:19px; font-weight:800; color:var(--primary-dark); line-height:1.3;}
+.brand-sub{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:13.5px; font-weight:700; margin-bottom:6px; color:var(--ink);}
+.field input, .field select, .field textarea{width:100%; padding:11px 12px; border:1.5px solid var(--border); border-radius:10px; background:#fff; color:var(--ink); outline:none; transition:border-color .15s;}
+.field input:focus, .field select:focus, .field textarea:focus{border-color:var(--primary);}
+.btn{border:none; border-radius:10px; padding:11px 18px; font-weight:700; cursor:pointer; font-size:14.5px; transition:filter .15s, transform .05s; display:inline-flex; align-items:center; gap:6px;}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:var(--primary); color:#fff;}
+.btn-primary:hover{filter:brightness(1.1);}
+.btn-accent{background:var(--accent); color:#2b2210;}
+.btn-outline{background:transparent; color:var(--primary); border:1.5px solid var(--primary);}
+.btn-danger{background:var(--danger); color:#fff;}
+.btn-ghost{background:transparent; color:var(--ink-soft);}
+.btn-sm{padding:7px 12px; font-size:13px; border-radius:8px;}
+.btn-block{width:100%; justify-content:center;}
+.login-error{background:var(--danger-soft); color:var(--danger); border-radius:8px; padding:9px 12px; font-size:13px; margin-bottom:14px; font-weight:700; display:none;}
+.demo-box{margin-top:18px; padding:12px 14px; background:var(--primary-soft); border-radius:10px; font-size:12.5px; color:var(--primary-dark); line-height:1.9;}
+.demo-box b{font-weight:800;}
+
+#app{display:none; min-height:100vh;}
+.shell{display:flex; min-height:100vh;}
+.sidebar{width:236px; background:var(--primary-dark); color:#EAF0EE; flex-shrink:0; display:flex; flex-direction:column; position:fixed; top:0; bottom:0; right:0; z-index:40; transition:transform .2s;}
+.sidebar-head{padding:20px 18px 14px; border-bottom:1px solid rgba(255,255,255,0.1);}
+.sidebar-title{font-size:16px; font-weight:800; color:#fff;}
+.sidebar-sub{font-size:11.5px; color:#B9CBC4; margin-top:3px;}
+.nav{padding:12px 10px; flex:1; overflow-y:auto;}
+.nav-item{display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:9px; color:#CFDEDA; cursor:pointer; font-size:14.5px; font-weight:600; margin-bottom:3px; border-right:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.06);}
+.nav-item.active{background:rgba(255,255,255,0.1); color:#fff; border-right-color:var(--accent);}
+.nav-icon{width:19px; height:19px; flex-shrink:0;}
+.sidebar-foot{padding:14px 18px; border-top:1px solid rgba(255,255,255,0.1); font-size:12px; color:#9FB4AE;}
+.main{flex:1; margin-right:236px; min-height:100vh; display:flex; flex-direction:column;}
+.topbar{background:var(--surface); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:20;}
+.topbar-title{font-size:18px; font-weight:800;}
+.topbar-right{display:flex; align-items:center; gap:14px;}
+.user-chip{display:flex; align-items:center; gap:9px; padding:6px 6px 6px 12px; border-radius:30px; background:var(--bg); border:1px solid var(--border);}
+.user-avatar{width:30px; height:30px; border-radius:50%; background:var(--accent); color:#2b2210; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px;}
+.user-meta{font-size:12.5px; line-height:1.3;}
+.user-meta b{display:block; font-size:13.5px;}
+.hamburger{display:none; background:none; border:none; cursor:pointer; padding:4px;}
+.content{padding:22px 24px 60px; max-width:1180px; width:100%; margin:0 auto;}
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:35; display:none;}
+
+.page-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap;}
+.page-head h2{font-size:21px;}
+.page-desc{color:var(--ink-soft); font-size:13.5px; margin-top:4px; max-width:60ch;}
+.stat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:22px;}
+.stat-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; border-right:4px solid var(--primary);}
+.stat-card.accent{border-right-color:var(--accent);}
+.stat-card.danger{border-right-color:var(--danger);}
+.stat-card.info{border-right-color:var(--info);}
+.stat-num{font-size:26px; font-weight:800; color:var(--primary-dark);}
+.stat-label{font-size:12.5px; color:var(--ink-soft); margin-top:3px; font-weight:600;}
+.panel{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 18px 8px; margin-bottom:18px;}
+.panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;}
+.panel-head h3{font-size:15.5px;}
+.badge{display:inline-block; padding:3px 10px; border-radius:20px; font-size:11.5px; font-weight:700;}
+.badge-success{background:var(--success-soft); color:var(--success);}
+.badge-warn{background:var(--warn-soft); color:var(--warn);}
+.badge-danger{background:var(--danger-soft); color:var(--danger);}
+.badge-info{background:var(--info-soft); color:var(--info);}
+.badge-accent{background:var(--accent-soft); color:#8a6a1f;}
+table{width:100%; border-collapse:collapse;}
+th{text-align:right; font-size:11.5px; color:var(--ink-soft); font-weight:700; padding:9px 8px; border-bottom:1.5px solid var(--border); white-space:nowrap;}
+td{padding:11px 8px; border-bottom:1px solid var(--border); font-size:13.5px; vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+.row-actions{display:flex; gap:6px; flex-wrap:wrap;}
+.empty-state{padding:38px 20px; text-align:center; color:var(--ink-soft);}
+.empty-state h4{color:var(--ink); margin-bottom:6px; font-size:15px;}
+.empty-state p{font-size:13px; max-width:40ch; margin:0 auto;}
+.toolbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center;}
+.toolbar input, .toolbar select{padding:9px 12px; border:1.5px solid var(--border); border-radius:9px; background:#fff;}
+.tag-pill{background:var(--bg); border:1px solid var(--border); padding:3px 10px; border-radius:20px; font-size:11.5px;}
+
+.modal-backdrop{position:fixed; inset:0; background:rgba(28,35,33,0.5); display:none; align-items:center; justify-content:center; z-index:60; padding:16px;}
+.modal{background:var(--surface); border-radius:16px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; padding:22px;}
+.modal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+.modal-head h3{font-size:17px;}
+.close-x{background:none; border:none; cursor:pointer; font-size:20px; color:var(--ink-soft); line-height:1;}
+.form-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.form-grid .full{grid-column:1/-1;}
+.modal-actions{display:flex; justify-content:flex-start; gap:8px; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;}
+.hint{font-size:11.5px; color:var(--ink-soft); margin-top:4px;}
+
+#toastHost{position:fixed; bottom:18px; left:18px; z-index:80; display:flex; flex-direction:column; gap:8px;}
+.toast{background:var(--ink); color:#fff; padding:11px 16px; border-radius:10px; font-size:13.5px; box-shadow:0 10px 25px -10px rgba(0,0,0,0.4); animation:slideup .18s ease;}
+.toast.err{background:var(--danger);}
+.toast.ok{background:var(--success);}
+@keyframes slideup{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+.clock-card{background:var(--primary-dark); color:#fff; border-radius:16px; padding:26px; text-align:center; margin-bottom:18px;}
+.clock-time{font-size:38px; font-weight:900; color:var(--accent); font-variant-numeric:tabular-nums;}
+.clock-date{font-size:13px; color:#C9D6D0; margin-top:4px;}
+.clock-status{margin-top:16px; font-size:13px;}
+
+@media (max-width:900px){
+  .sidebar{transform:translateX(100%);}
+  .sidebar.open{transform:translateX(0);}
+  .main{margin-right:0;}
+  .hamburger{display:block;}
+  .form-grid{grid-template-columns:1fr;}
+  .content{padding:16px 14px 50px;}
+  .topbar{padding:12px 14px;}
+}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3L4 7v5c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V7l-8-4z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#C89B3C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><div class="brand-title">بوابة موظفي رواحم</div><div class="brand-sub">المهام، الحضور، الإجازات والتعاميم</div></div>
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <div class="field"><label>اسم المستخدم</label><input id="loginUser" placeholder="اكتب اسم المستخدم"></div>
+    <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" placeholder="اكتب كلمة المرور"></div>
+    <button class="btn btn-primary btn-block" onclick="doLogin()">تسجيل الدخول</button>
+    <div class="demo-box">
+      نفس حسابات النظام الإداري:<br>
+      <b>مدير النظام:</b> admin / admin123<br>
+      <b>موظف:</b> employee / emp123
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="overlay" id="overlay" onclick="toggleSidebar(false)"></div>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head"><div class="sidebar-title">بوابة الموظفين</div><div class="sidebar-sub">جمعية رواحم</div></div>
+      <nav class="nav" id="navList"></nav>
+      <div class="sidebar-foot">جميع الحقوق محفوظة © جمعية رواحم</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="hamburger" onclick="toggleSidebar(true)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#1C2321" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <div class="topbar-title" id="topbarTitle">لوحة المعلومات</div>
+        </div>
+        <div class="topbar-right">
+          <div class="user-chip"><div class="user-avatar" id="avatarLetter">أ</div><div class="user-meta"><b id="userNameTop"></b><span id="userRoleTop"></span></div></div>
+          <button class="btn btn-ghost btn-sm" onclick="doLogout()">خروج</button>
+        </div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop"><div class="modal" id="modalBox"></div></div>
+<div id="toastHost"></div>
+
+<script>
+/* =========================================================
+   بوابة الموظفين — تشارك نفس قاعدة بيانات النظام الإداري (Firestore)
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCVt8BV-SpdIRkDEuZLHUZ1eTfmtqMDqSo",
+  authDomain: "rawahem-system.firebaseapp.com",
+  projectId: "rawahem-system",
+  storageBucket: "rawahem-system.firebasestorage.app",
+  messagingSenderId: "488477149213",
+  appId: "1:488477149213:web:3f63203c6857c047ca5ef4"
+};
+let db = null, firebaseReady = false;
+try{ firebase.initializeApp(firebaseConfig); db = firebase.firestore(); firebaseReady = true; }catch(e){ console.error(e); }
+
+const KEYS = ['users','tasks','attendance','leaves','emprequests','circulars','programs'];
+let DB = {users:[], tasks:[], attendance:[], leaves:[], emprequests:[], circulars:[], programs:[]};
+let currentUser = null, currentView = 'dashboard';
+const ROLE_LABEL = {admin:'مدير النظام', employee:'موظف الجمعية', board:'عضو مجلس إدارة', auditor:'مراجع خارجي'};
+
+async function loadKey(name){
+  if(!firebaseReady){ return; }
+  try{
+    const snap = await db.collection('raham').doc(name).get();
+    DB[name] = (snap.exists && snap.data().value) ? JSON.parse(snap.data().value) : [];
+  }catch(e){ console.error('load failed', name, e); DB[name] = DB[name] || []; }
+}
+async function saveKey(name){
+  if(!firebaseReady){ toast('قاعدة البيانات غير متصلة', 'err'); return; }
+  try{ await db.collection('raham').doc(name).set({value: JSON.stringify(DB[name])}); return true; }
+  catch(e){ toast('تعذر الحفظ، تحقق من الاتصال', 'err'); console.error(e); }
+}
+async function loadAll(){ for(const k of KEYS) await loadKey(k); }
+
+function uid(p){ return (p||'id')+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function nowIso(){ return new Date().toISOString(); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(iso){ if(!iso) return '—'; return new Date(iso).toLocaleDateString('ar-SA',{year:'numeric',month:'2-digit',day:'2-digit'}); }
+function fmtDateTime(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('ar-SA')+' '+d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }
+function fmtTime(iso){ if(!iso) return '—'; return new Date(iso).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toast(msg,type){
+  const host=document.getElementById('toastHost'); const t=document.createElement('div');
+  t.className='toast'+(type==='err'?' err':type==='ok'?' ok':''); t.textContent=msg; host.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300);},2600);
+}
+
+async function doLogin(){
+  const u=document.getElementById('loginUser').value.trim();
+  const p=document.getElementById('loginPass').value;
+  const errBox=document.getElementById('loginError');
+  const found=DB.users.find(x=>x.username===u && x.password===p);
+  if(!found){ errBox.textContent='اسم المستخدم أو كلمة المرور غير صحيحة'; errBox.style.display='block'; return; }
+  if(!found.active){ errBox.textContent='هذا الحساب موقوف'; errBox.style.display='block'; return; }
+  errBox.style.display='none'; currentUser=found; enterApp();
+}
+function doLogout(){ currentUser=null; document.getElementById('app').style.display='none'; document.getElementById('loginScreen').style.display='flex'; document.getElementById('loginUser').value=''; document.getElementById('loginPass').value=''; }
+function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('userNameTop').textContent=currentUser.name;
+  document.getElementById('userRoleTop').textContent=ROLE_LABEL[currentUser.role]||currentUser.role;
+  document.getElementById('avatarLetter').textContent=currentUser.name.trim()[0]||'م';
+  buildNav(); navigate('dashboard');
+}
+function isAdmin(){ return currentUser.role==='admin'; }
+
+const NAV_ITEMS=[
+  {id:'dashboard', label:'لوحة المعلومات', icon:'grid'},
+  {id:'tasks', label:'المهام', icon:'check'},
+  {id:'attendance', label:'الحضور والانصراف', icon:'clock'},
+  {id:'leaves', label:'الإجازات', icon:'calendar'},
+  {id:'requests', label:'طلباتي الإدارية', icon:'doc'},
+  {id:'circulars', label:'التعاميم', icon:'bell'},
+  {id:'programs', label:'البرامج المكلف بها', icon:'flag'},
+];
+function icon(name){
+  const p={
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    check:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
+    doc:'<path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/>',
+    bell:'<path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M9.5 20a2.5 2.5 0 005 0"/>',
+    flag:'<path d="M5 21V4"/><path d="M5 4h13l-3 4.5L18 13H5"/>'
+  };
+  return '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+p[name]+'</svg>';
+}
+function buildNav(){
+  const nav=document.getElementById('navList'); nav.innerHTML='';
+  NAV_ITEMS.forEach(item=>{
+    const d=document.createElement('div');
+    d.className='nav-item'+(item.id===currentView?' active':'');
+    d.innerHTML=icon(item.icon)+'<span>'+item.label+'</span>';
+    d.onclick=()=>{ navigate(item.id); toggleSidebar(false); };
+    nav.appendChild(d);
+  });
+}
+function toggleSidebar(open){ document.getElementById('sidebar').classList.toggle('open',open); document.getElementById('overlay').style.display=open?'block':'none'; }
+function navigate(view){
+  currentView=view;
+  document.getElementById('topbarTitle').textContent=(NAV_ITEMS.find(n=>n.id===view)||{}).label||'';
+  buildNav();
+  const c=document.getElementById('content'); c.innerHTML='';
+  const renderers={dashboard:renderDashboard, tasks:renderTasks, attendance:renderAttendance, leaves:renderLeaves, requests:renderRequests, circulars:renderCirculars, programs:renderPrograms};
+  (renderers[view]||renderDashboard)(c);
+}
+
+function buildTable(columns, rows, actionsFn, emptyTitle, emptyDesc){
+  if(!rows.length){ const e=document.createElement('div'); e.className='empty-state'; e.innerHTML='<h4>'+esc(emptyTitle)+'</h4><p>'+esc(emptyDesc)+'</p>'; return e; }
+  const wrap=document.createElement('div'); wrap.style.overflowX='auto';
+  const t=document.createElement('table'); const thead=document.createElement('tr');
+  columns.forEach(c=>{ const th=document.createElement('th'); th.textContent=c.label; thead.appendChild(th); });
+  if(actionsFn){ const th=document.createElement('th'); th.textContent=''; thead.appendChild(th); }
+  t.appendChild(thead);
+  rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    columns.forEach(c=>{ const td=document.createElement('td'); if(c.html) td.innerHTML=c.render(row); else td.textContent=c.render?c.render(row):(row[c.key]??'—'); tr.appendChild(td); });
+    if(actionsFn){ const td=document.createElement('td'); const div=document.createElement('div'); div.className='row-actions';
+      actionsFn(row).forEach(a=>{ const b=document.createElement('button'); b.className='btn btn-sm '+(a.variant||'btn-outline'); b.textContent=a.label; b.onclick=a.onClick; div.appendChild(b); });
+      td.appendChild(div); tr.appendChild(td); }
+    t.appendChild(tr);
+  });
+  wrap.appendChild(t); return wrap;
+}
+function openModal(title, fields, initial, onSubmit){
+  const backdrop=document.getElementById('modalBackdrop'); const box=document.getElementById('modalBox'); initial=initial||{};
+  let html='<div class="modal-head"><h3>'+esc(title)+'</h3><button class="close-x" onclick="closeModal()">&times;</button></div><div class="form-grid">';
+  fields.forEach(f=>{
+    const val=initial[f.key]!==undefined?initial[f.key]:(f.default!==undefined?f.default:'');
+    html+='<div class="field '+(f.full?'full':'')+'"><label>'+esc(f.label)+(f.required?' *':'')+'</label>';
+    if(f.type==='select'){ html+='<select id="mf_'+f.key+'">'+f.options.map(o=>'<option value="'+esc(o.value)+'" '+(String(val)===String(o.value)?'selected':'')+'>'+esc(o.label)+'</option>').join('')+'</select>'; }
+    else if(f.type==='textarea'){ html+='<textarea id="mf_'+f.key+'" rows="3">'+esc(val)+'</textarea>'; }
+    else { html+='<input type="'+(f.type||'text')+'" id="mf_'+f.key+'" value="'+esc(val)+'">'; }
+    if(f.hint) html+='<div class="hint">'+esc(f.hint)+'</div>';
+    html+='</div>';
+  });
+  html+='</div><div class="modal-actions"><button class="btn btn-primary" id="modalSubmitBtn">حفظ</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>';
+  box.innerHTML=html; backdrop.style.display='flex';
+  document.getElementById('modalSubmitBtn').onclick=async ()=>{
+    const out={}; let ok=true;
+    for(const f of fields){ const elm=document.getElementById('mf_'+f.key); if(!elm) continue;
+      const v=elm.value.trim(); if(f.required && !v){ toast('يرجى تعبئة: '+f.label,'err'); ok=false; break; } out[f.key]=v; }
+    if(!ok) return; await onSubmit(out); closeModal();
+  };
+}
+function closeModal(){ document.getElementById('modalBackdrop').style.display='none'; document.getElementById('modalBox').innerHTML=''; }
+function confirmDialog(title,msg,onYes){
+  const box=document.getElementById('modalBox');
+  box.innerHTML='<div class="modal-head"><h3>'+esc(title)+'</h3><button class="close-x" onclick="closeModal()">&times;</button></div><p style="font-size:14px; color:var(--ink-soft); line-height:1.7;">'+esc(msg)+'</p><div class="modal-actions"><button class="btn btn-danger" id="cfYes">تأكيد</button><button class="btn btn-ghost" onclick="closeModal()">تراجع</button></div>';
+  document.getElementById('modalBackdrop').style.display='flex';
+  document.getElementById('cfYes').onclick=async()=>{ await onYes(); closeModal(); };
+}
+function statCard(num,label,variant){ return '<div class="stat-card '+(variant||'')+'"><div class="stat-num">'+num+'</div><div class="stat-label">'+label+'</div></div>'; }
+
+/* ============ DASHBOARD ============ */
+function renderDashboard(c){
+  const myTasks=DB.tasks.filter(t=>t.assignedTo===currentUser.username && t.status!=='مكتملة');
+  const todayAtt=DB.attendance.find(a=>a.username===currentUser.username && a.date===todayStr());
+  const myPendingLeaves=DB.leaves.filter(l=>l.username===currentUser.username && l.status==='قيد المراجعة');
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>مرحبًا، '+esc(currentUser.name)+'</h2><div class="page-desc">نظرة سريعة على مهامك، حضورك اليوم، وآخر التعاميم.</div></div>';
+  c.appendChild(head);
+  const stats=document.createElement('div'); stats.className='stat-grid';
+  stats.innerHTML=statCard(myTasks.length,'مهمة نشطة','')+
+    statCard(todayAtt&&todayAtt.checkIn?(todayAtt.checkOut?'منتهي':'حاضر'):'لم يسجَّل','حالة الحضور اليوم','accent')+
+    statCard(myPendingLeaves.length,'طلب إجازة قيد المراجعة','info')+
+    statCard(DB.circulars.length,'تعميم منشور','');
+  c.appendChild(stats);
+  if(isAdmin()){
+    const pendingLeaves=DB.leaves.filter(l=>l.status==='قيد المراجعة').length;
+    const pendingReq=DB.emprequests.filter(r=>r.status==='قيد المراجعة').length;
+    if(pendingLeaves||pendingReq){
+      const p=document.createElement('div'); p.className='panel';
+      p.innerHTML='<div class="panel-head"><h3>بانتظار موافقتك</h3></div><p style="font-size:13.5px; color:var(--ink-soft);">'+pendingLeaves+' طلب إجازة، '+pendingReq+' طلب إداري بحاجة مراجعة.</p>';
+      c.appendChild(p);
+    }
+  }
+  const panel=document.createElement('div'); panel.className='panel';
+  panel.innerHTML='<div class="panel-head"><h3>مهامي القادمة</h3></div>';
+  const list=document.createElement('div');
+  if(!myTasks.length){ list.innerHTML='<div class="empty-state"><h4>لا توجد مهام نشطة</h4><p>ستظهر هنا أي مهمة تُسند إليك.</p></div>'; }
+  else{ myTasks.slice(0,6).forEach(t=>{
+    const row=document.createElement('div'); row.style.cssText='display:flex; justify-content:space-between; align-items:center; padding:9px 4px; border-bottom:1px solid var(--border);';
+    row.innerHTML='<span style="font-size:13.5px;">'+esc(t.title)+'</span><span class="badge '+(t.status==='قيد التنفيذ'?'badge-info':'badge-warn')+'">'+esc(t.status)+'</span>';
+    list.appendChild(row);
+  }); }
+  panel.appendChild(list); c.appendChild(panel);
+}
+
+/* ============ TASKS ============ */
+const TASK_STATUS=['لم تبدأ','قيد التنفيذ','مكتملة'];
+function renderTasks(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>المهام</h2><div class="page-desc">'+(isAdmin()?'إنشاء المهام وتوزيعها على فريق العمل ومتابعة الإنجاز.':'مهامك المكلَّف بها وحالتها.')+'</div></div>';
+  if(isAdmin()){ const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='+ مهمة جديدة'; b.onclick=()=>openTaskModal(); head.appendChild(b); }
+  c.appendChild(head);
+  const rows=isAdmin()?DB.tasks:DB.tasks.filter(t=>t.assignedTo===currentUser.username);
+  const sorted=[...rows].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  c.appendChild(buildTable(
+    [{label:'العنوان',render:r=>r.title},
+     {label:'المكلَّف',render:r=>r.assignedToName},
+     {label:'الموعد',render:r=>fmtDate(r.dueDate)},
+     {label:'الأولوية',html:true,render:r=>'<span class="tag-pill">'+esc(r.priority)+'</span>'},
+     {label:'الحالة',html:true,render:r=>{const overdue=r.dueDate && new Date(r.dueDate)<new Date() && r.status!=='مكتملة'; return overdue?'<span class="badge badge-danger">متأخرة</span>':(r.status==='مكتملة'?'<span class="badge badge-success">مكتملة</span>':r.status==='قيد التنفيذ'?'<span class="badge badge-info">قيد التنفيذ</span>':'<span class="badge badge-warn">لم تبدأ</span>');}}],
+    sorted,
+    (r)=>{
+      const acts=[];
+      if(r.assignedTo===currentUser.username && r.status!=='مكتملة'){
+        acts.push({label:'قيد التنفيذ', onClick:async()=>{r.status='قيد التنفيذ'; await saveKey('tasks'); navigate('tasks');}});
+        acts.push({label:'إنهاء', variant:'btn-primary', onClick:async()=>{r.status='مكتملة'; await saveKey('tasks'); toast('أُنجزت المهمة','ok'); navigate('tasks');}});
+      }
+      if(isAdmin()) acts.push({label:'حذف', variant:'btn-danger', onClick:()=>confirmDialog('حذف المهمة','سيتم حذف "'+r.title+'".',async()=>{DB.tasks=DB.tasks.filter(x=>x.id!==r.id); await saveKey('tasks'); navigate('tasks');})});
+      return acts;
+    },
+    'لا توجد مهام', isAdmin()?'أضف أول مهمة ووزّعها على فريق العمل.':'لا توجد مهام مسندة إليك حاليًا.'
+  ));
+}
+function openTaskModal(){
+  const employees=DB.users.filter(u=>u.active);
+  openModal('مهمة جديدة',[
+    {key:'title', label:'عنوان المهمة', required:true, full:true},
+    {key:'description', label:'التفاصيل', type:'textarea', full:true},
+    {key:'assignedTo', label:'إسناد إلى', type:'select', options:employees.map(u=>({value:u.username,label:u.name})), required:true},
+    {key:'priority', label:'الأولوية', type:'select', options:[{value:'عادية',label:'عادية'},{value:'مهمة',label:'مهمة'},{value:'عاجلة',label:'عاجلة'}]},
+    {key:'dueDate', label:'موعد الإنجاز', type:'date'},
+  ], {priority:'عادية'}, async(vals)=>{
+    const u=employees.find(x=>x.username===vals.assignedTo);
+    DB.tasks.unshift({id:uid('t'), title:vals.title, description:vals.description||'', assignedTo:vals.assignedTo, assignedToName:u?u.name:vals.assignedTo, priority:vals.priority, dueDate:vals.dueDate||'', status:'لم تبدأ', createdAt:nowIso(), createdBy:currentUser.name});
+    await saveKey('tasks'); toast('تم إنشاء المهمة','ok'); navigate('tasks');
+  });
+}
+
+/* ============ ATTENDANCE ============ */
+function renderAttendance(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>الحضور والانصراف</h2><div class="page-desc">'+(isAdmin()?'سجل حضور جميع الموظفين.':'سجّل حضورك وانصرافك اليومي.')+'</div></div>';
+  c.appendChild(head);
+  if(!isAdmin()){
+    const today=DB.attendance.find(a=>a.username===currentUser.username && a.date===todayStr());
+    const card=document.createElement('div'); card.className='clock-card';
+    const now=new Date();
+    card.innerHTML='<div class="clock-time">'+now.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})+'</div><div class="clock-date">'+now.toLocaleDateString('ar-SA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+'</div><div class="clock-status" id="clockStatus"></div>';
+    c.appendChild(card);
+    const statusEl=card.querySelector('#clockStatus');
+    const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex; gap:10px; justify-content:center; margin-bottom:22px;';
+    if(!today || !today.checkIn){
+      statusEl.innerHTML='لم يُسجَّل حضور اليوم';
+      const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='تسجيل حضور';
+      b.onclick=async()=>{ const rec={id:uid('att'), username:currentUser.username, name:currentUser.name, date:todayStr(), checkIn:nowIso(), checkOut:null}; DB.attendance.unshift(rec); await saveKey('attendance'); toast('تم تسجيل الحضور','ok'); navigate('attendance'); };
+      btnRow.appendChild(b);
+    } else if(!today.checkOut){
+      statusEl.innerHTML='حاضر منذ '+fmtTime(today.checkIn);
+      const b=document.createElement('button'); b.className='btn btn-danger'; b.textContent='تسجيل انصراف';
+      b.onclick=async()=>{ today.checkOut=nowIso(); await saveKey('attendance'); toast('تم تسجيل الانصراف','ok'); navigate('attendance'); };
+      btnRow.appendChild(b);
+    } else {
+      statusEl.innerHTML='اكتمل يومك: حضور '+fmtTime(today.checkIn)+' — انصراف '+fmtTime(today.checkOut);
+    }
+    c.appendChild(btnRow);
+  }
+  const rows=isAdmin()?DB.attendance:DB.attendance.filter(a=>a.username===currentUser.username);
+  const sorted=[...rows].sort((a,b)=>b.date.localeCompare(a.date));
+  const panel=document.createElement('div'); panel.className='panel'; panel.innerHTML='<div class="panel-head"><h3>السجل</h3></div>';
+  panel.appendChild(buildTable(
+    [{label:'التاريخ',render:r=>fmtDate(r.date)}].concat(isAdmin()?[{label:'الموظف',render:r=>r.name}]:[]).concat([
+     {label:'الحضور',render:r=>fmtTime(r.checkIn)},
+     {label:'الانصراف',render:r=>r.checkOut?fmtTime(r.checkOut):'—'}]),
+    sorted.slice(0,100), null, 'لا يوجد سجل حضور بعد', ''
+  ));
+  c.appendChild(panel);
+}
+
+/* ============ LEAVES ============ */
+const LEAVE_TYPES=['سنوية','مرضية','طارئة','أخرى'];
+function renderLeaves(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>الإجازات</h2><div class="page-desc">'+(isAdmin()?'مراجعة واعتماد طلبات إجازات الموظفين.':'تقديم طلب إجازة ومتابعة حالته.')+'</div></div>';
+  if(!isAdmin()){ const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='+ طلب إجازة'; b.onclick=()=>openLeaveModal(); head.appendChild(b); }
+  c.appendChild(head);
+  const rows=isAdmin()?DB.leaves:DB.leaves.filter(l=>l.username===currentUser.username);
+  const sorted=[...rows].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  c.appendChild(buildTable(
+    [{label:'النوع',render:r=>r.type}].concat(isAdmin()?[{label:'الموظف',render:r=>r.name}]:[]).concat([
+     {label:'من',render:r=>fmtDate(r.fromDate)}, {label:'إلى',render:r=>fmtDate(r.toDate)},
+     {label:'الحالة',html:true,render:r=>r.status==='معتمدة'?'<span class="badge badge-success">معتمدة</span>':r.status==='مرفوضة'?'<span class="badge badge-danger">مرفوضة</span>':'<span class="badge badge-warn">قيد المراجعة</span>'}]),
+    sorted,
+    (r)=>{
+      if(isAdmin() && r.status==='قيد المراجعة') return [
+        {label:'اعتماد', variant:'btn-primary', onClick:async()=>{r.status='معتمدة'; r.reviewedBy=currentUser.name; r.reviewedAt=nowIso(); await saveKey('leaves'); navigate('leaves');}},
+        {label:'رفض', variant:'btn-danger', onClick:async()=>{r.status='مرفوضة'; r.reviewedBy=currentUser.name; r.reviewedAt=nowIso(); await saveKey('leaves'); navigate('leaves');}}
+      ];
+      return [];
+    },
+    'لا توجد طلبات إجازة', isAdmin()?'':'قدّم طلب إجازتك الأول من الزر أعلاه.'
+  ));
+}
+function openLeaveModal(){
+  openModal('طلب إجازة جديد',[
+    {key:'type', label:'نوع الإجازة', type:'select', options:LEAVE_TYPES.map(x=>({value:x,label:x})), required:true},
+    {key:'fromDate', label:'من تاريخ', type:'date', required:true},
+    {key:'toDate', label:'إلى تاريخ', type:'date', required:true},
+    {key:'reason', label:'السبب', type:'textarea', full:true},
+  ], {}, async(vals)=>{
+    DB.leaves.unshift({id:uid('lv'), username:currentUser.username, name:currentUser.name, type:vals.type, fromDate:vals.fromDate, toDate:vals.toDate, reason:vals.reason||'', status:'قيد المراجعة', createdAt:nowIso()});
+    await saveKey('leaves'); toast('تم إرسال طلب الإجازة','ok'); navigate('leaves');
+  });
+}
+
+/* ============ REQUESTS (generic admin requests) ============ */
+const REQ_TYPES=['سلفة مالية','شكوى','استفسار','طلب معدات','أخرى'];
+function renderRequests(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>الطلبات الإدارية</h2><div class="page-desc">'+(isAdmin()?'مراجعة الطلبات الإدارية المقدَّمة من الموظفين.':'تقديم طلب إداري (سلفة، شكوى، استفسار...) ومتابعته.')+'</div></div>';
+  if(!isAdmin()){ const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='+ طلب جديد'; b.onclick=()=>openReqModal(); head.appendChild(b); }
+  c.appendChild(head);
+  const rows=isAdmin()?DB.emprequests:DB.emprequests.filter(r=>r.username===currentUser.username);
+  const sorted=[...rows].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  c.appendChild(buildTable(
+    [{label:'النوع',render:r=>r.type}].concat(isAdmin()?[{label:'الموظف',render:r=>r.name}]:[]).concat([
+     {label:'الموضوع',render:r=>r.subject},
+     {label:'الحالة',html:true,render:r=>r.status==='معتمد'?'<span class="badge badge-success">معتمد</span>':r.status==='مرفوض'?'<span class="badge badge-danger">مرفوض</span>':'<span class="badge badge-warn">قيد المراجعة</span>'}]),
+    sorted,
+    (r)=>{
+      if(isAdmin() && r.status==='قيد المراجعة') return [
+        {label:'اعتماد', variant:'btn-primary', onClick:async()=>{r.status='معتمد'; r.reviewedBy=currentUser.name; r.reviewedAt=nowIso(); await saveKey('emprequests'); navigate('requests');}},
+        {label:'رفض', variant:'btn-danger', onClick:async()=>{r.status='مرفوض'; r.reviewedBy=currentUser.name; r.reviewedAt=nowIso(); await saveKey('emprequests'); navigate('requests');}}
+      ];
+      return [];
+    },
+    'لا توجد طلبات', isAdmin()?'':'قدّم طلبك الأول من الزر أعلاه.'
+  ));
+}
+function openReqModal(){
+  openModal('طلب إداري جديد',[
+    {key:'type', label:'نوع الطلب', type:'select', options:REQ_TYPES.map(x=>({value:x,label:x})), required:true},
+    {key:'subject', label:'الموضوع', required:true, full:true},
+    {key:'description', label:'التفاصيل', type:'textarea', full:true},
+  ], {}, async(vals)=>{
+    DB.emprequests.unshift({id:uid('er'), username:currentUser.username, name:currentUser.name, type:vals.type, subject:vals.subject, description:vals.description||'', status:'قيد المراجعة', createdAt:nowIso()});
+    await saveKey('emprequests'); toast('تم إرسال الطلب','ok'); navigate('requests');
+  });
+}
+
+/* ============ CIRCULARS ============ */
+function renderCirculars(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>التعاميم</h2><div class="page-desc">إشعارات وتعاميم رسمية من إدارة الجمعية.</div></div>';
+  if(isAdmin()){ const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='+ نشر تعميم'; b.onclick=()=>openCircularModal(); head.appendChild(b); }
+  c.appendChild(head);
+  const sorted=[...DB.circulars].sort((a,b)=>new Date(b.postedAt)-new Date(a.postedAt));
+  if(!sorted.length){ c.appendChild(buildTable([],[],null,'لا توجد تعاميم بعد','ستظهر هنا أي تعاميم تنشرها الإدارة.')); return; }
+  sorted.forEach(cir=>{
+    const p=document.createElement('div'); p.className='panel';
+    p.innerHTML='<div class="panel-head"><h3>'+esc(cir.title)+'</h3><span class="tag-pill">'+fmtDate(cir.postedAt)+'</span></div><p style="font-size:13.5px; color:var(--ink-soft); line-height:1.8;">'+esc(cir.body)+'</p><p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px;">بواسطة '+esc(cir.postedBy)+'</p>';
+    c.appendChild(p);
+  });
+}
+function openCircularModal(){
+  openModal('نشر تعميم جديد',[
+    {key:'title', label:'العنوان', required:true, full:true},
+    {key:'body', label:'نص التعميم', type:'textarea', required:true, full:true},
+  ], {}, async(vals)=>{
+    DB.circulars.unshift({id:uid('cir'), title:vals.title, body:vals.body, postedBy:currentUser.name, postedAt:nowIso()});
+    await saveKey('circulars'); toast('تم نشر التعميم','ok'); navigate('circulars');
+  });
+}
+
+/* ============ PROGRAMS ============ */
+function renderPrograms(c){
+  const head=document.createElement('div'); head.className='page-head';
+  head.innerHTML='<div><h2>البرامج والمشاريع</h2><div class="page-desc">'+(isAdmin()?'إنشاء البرامج وتعيين فريق العمل المسؤول.':'البرامج التي تشارك فيها حاليًا.')+'</div></div>';
+  if(isAdmin()){ const b=document.createElement('button'); b.className='btn btn-primary'; b.textContent='+ برنامج جديد'; b.onclick=()=>openProgramModal(); head.appendChild(b); }
+  c.appendChild(head);
+  const rows=isAdmin()?DB.programs:DB.programs.filter(p=>(p.assigned||[]).includes(currentUser.username));
+  c.appendChild(buildTable(
+    [{label:'اسم البرنامج',render:r=>r.name}, {label:'الوصف',render:r=>r.description||'—'},
+     {label:'الحالة',html:true,render:r=>'<span class="badge '+(r.status==='نشط'?'badge-success':'badge-warn')+'">'+esc(r.status)+'</span>'},
+     {label:'الفريق',render:r=>(r.assigned||[]).map(u=>{const x=DB.users.find(y=>y.username===u); return x?x.name:u;}).join('، ')||'—'}],
+    rows,
+    isAdmin()?(r)=>[{label:'حذف', variant:'btn-danger', onClick:()=>confirmDialog('حذف البرنامج','سيتم حذف "'+r.name+'".',async()=>{DB.programs=DB.programs.filter(x=>x.id!==r.id); await saveKey('programs'); navigate('programs');})}]:null,
+    'لا توجد برامج', isAdmin()?'أنشئ أول برنامج وعيّن فريق العمل.':'لم تُعيَّن على أي برنامج حاليًا.'
+  ));
+}
+function openProgramModal(){
+  const employees=DB.users.filter(u=>u.active && u.role==='employee');
+  let html='<div class="modal-head"><h3>برنامج جديد</h3><button class="close-x" onclick="closeModal()">&times;</button></div><div class="form-grid">'+
+    '<div class="field full"><label>اسم البرنامج *</label><input id="pf_name"></div>'+
+    '<div class="field full"><label>الوصف</label><textarea id="pf_desc" rows="2"></textarea></div>'+
+    '<div class="field"><label>الحالة</label><select id="pf_status"><option value="نشط">نشط</option><option value="متوقف">متوقف</option></select></div>'+
+    '<div class="field full"><label>فريق العمل</label>'+employees.map(u=>'<label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px;"><input type="checkbox" class="pf_emp" value="'+esc(u.username)+'"> '+esc(u.name)+'</label>').join('')+'</div>'+
+    '</div><div class="modal-actions"><button class="btn btn-primary" id="pfSubmit">حفظ</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>';
+  document.getElementById('modalBox').innerHTML=html;
+  document.getElementById('modalBackdrop').style.display='flex';
+  document.getElementById('pfSubmit').onclick=async()=>{
+    const name=document.getElementById('pf_name').value.trim();
+    if(!name){ toast('يرجى إدخال اسم البرنامج','err'); return; }
+    const assigned=Array.from(document.querySelectorAll('.pf_emp:checked')).map(x=>x.value);
+    DB.programs.unshift({id:uid('prg'), name, description:document.getElementById('pf_desc').value.trim(), status:document.getElementById('pf_status').value, assigned, createdAt:nowIso()});
+    await saveKey('programs'); toast('تم إنشاء البرنامج','ok'); closeModal(); navigate('programs');
+  };
+}
+
+(async function boot(){
+  await loadAll();
+})();
+</script>
+</body>
+</html>
