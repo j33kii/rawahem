@@ -1503,6 +1503,14 @@ function renderRequests(c){
         const card = document.createElement('div'); card.className='kcard';
         card.innerHTML = '<div class="kcard-title">'+(r.source==='beneficiary'?'👪 ':'')+esc(r.subject)+'</div><div class="kcard-meta"><span>'+esc(r.type)+'</span>'+(d>OVERDUE_DAYS && r.status==='نشط' ? '<span class="badge badge-danger">'+d+' يوم</span>' : '<span class="tag-pill">'+d+' يوم</span>')+'</div>';
         card.onclick = ()=> openRequestDetail(r.id);
+        if(currentUser && currentUser.role==='admin'){
+          const del = document.createElement('button');
+          del.type='button'; del.title='حذف الطلب نهائيًا'; del.textContent='🗑';
+          del.style.cssText='position:absolute; left:6px; top:6px; border:0; background:transparent; cursor:pointer; font-size:14px; opacity:.6;';
+          del.onclick = (ev)=>{ ev.stopPropagation(); deleteRequestPermanently(r.id); };
+          card.style.position='relative';
+          card.appendChild(del);
+        }
         col.appendChild(card);
       });
     }
@@ -1550,6 +1558,7 @@ function openRequestDetail(id){
       '</div>'
       : '')+
     (isAdmin ? '<div class="modal-actions" style="border-top:1px solid var(--border); margin-top:4px; padding-top:12px;">'+
+      (r.status!=='نشط' ? '<button class="btn btn-outline" onclick="reopenRequest(\''+r.id+'\')">↩ إعادة فتح الطلب (استرجاع)</button>' : '')+
       '<button class="btn btn-ghost" style="color:var(--danger);" onclick="deleteRequestPermanently(\''+r.id+'\')">🗑 حذف الطلب نهائيًا من النظام</button>'+
       '</div>' : '');
   document.getElementById('modalBackdrop').style.display='flex';
@@ -1579,6 +1588,17 @@ async function actOnRequest(id, action){
     await notifyFamily(r.familyId, msg);
   }
   closeModal(); navigate('requests'); toast('تم تنفيذ الإجراء','ok');
+}
+async function reopenRequest(id){
+  const r = DB.requests.find(x=>x.id===id); if(!r) return;
+  if(currentUser.role!=='admin'){ toast('هذا الإجراء لمدير النظام فقط','err'); return; }
+  if(r.status==='معتمد'){ r.currentStageIndex = Math.max(1, r.stages.length-2); }
+  r.status='نشط';
+  r.history.push({stageIndex:r.currentStageIndex, stageName:currentStage(r).name, action:'إعادة فتح الطلب', byName:currentUser.name, byRole:currentUser.role, at:nowIso(), note:''});
+  await saveKey('requests');
+  await addAudit('إعادة فتح طلب','سير الموافقات', r.subject);
+  if(r.familyId){ await notifyFamily(r.familyId, 'تمت إعادة فتح طلبك للمراجعة: '+r.subject); }
+  closeModal(); navigate('requests'); toast('أُعيد فتح الطلب','ok');
 }
 function deleteRequestPermanently(id){
   const r = DB.requests.find(x=>x.id===id); if(!r) return;
