@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /rawahem/system.html
+Disallow: /rawahem/employees.html
+Disallow: /rawahem/beneficiary.html
+Sitemap: https://j33kii.github.io/rawahem/sitemap.xml
