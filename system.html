@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
 <style>
 :root{
   --bg:#FAF8F4; --surface:#FFFFFF; --ink:#1C2624; --ink-soft:#4E5B63;
@@ -393,6 +394,27 @@ try{
   authReady = true;
 }catch(e){ console.error('Firebase init failed', e); }
 
+/* ===== Cloud Functions (سيرفر آمن) ===== */
+let fns = null;
+try{ fns = firebase.app().functions('europe-west1'); }catch(e){ console.warn('functions unavailable', e); }
+async function callFn(name, data){
+  if(!fns) throw {code:'functions/unavailable'};
+  const r = await fns.httpsCallable(name)(data||{});
+  return r.data;
+}
+/* بعد دخول المدير: نفعّل صلاحية "admin" الموثّقة مرة واحدة، ثم نرحّل صلاحيات الحسابات الحالية */
+async function ensureAdminClaims(){
+  try{
+    if(!auth.currentUser || !fns) return;
+    let tok = await auth.currentUser.getIdTokenResult();
+    if(tok.claims.role==='admin') return;
+    await callFn('bootstrapAdmin');
+    await auth.currentUser.getIdToken(true);
+    try{ await callFn('adminSyncClaims'); }catch(e){ console.warn('syncClaims', e); }
+    toast('تم تفعيل الحماية المتقدمة لحساب المدير','ok');
+  }catch(e){ console.warn('ensureAdminClaims', e && e.code); }
+}
+
 /* توليد بريد إلكتروني داخلي ثابت من اسم المستخدم (لحسابات الدخول القديمة التي لا تملك بريدًا حقيقيًا بعد) */
 function usernameToEmail(u){
   const clean = (u||'').trim().toLowerCase().replace(/[^a-z0-9._-]/g,'');
@@ -426,16 +448,28 @@ function openManualPasswordReset(record, kind){
     '<div class="modal-head"><h3>تعيين كلمة مرور جديدة يدويًا</h3><button class="close-x" onclick="closeModal()">&times;</button></div>'+
     '<p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px; line-height:1.8;">بديل فوري لا يعتمد على البريد الإلكتروني — مفيد عند تعذّر وصول رسائل إعادة التعيين (كما يحدث أحيانًا مع Hotmail/Outlook). سيُنشأ حساب دخول بالبريد <b>'+esc(targetEmail)+'</b> وكلمة المرور التي تحددها أدناه.</p>'+
     '<div class="login-error" id="mprErr" style="display:none;"></div>'+
-    '<div class="field"><label>كلمة المرور الجديدة *</label><input id="mpr_pass" type="text" placeholder="6 أحرف على الأقل"></div>'+
+    '<div class="field"><label>كلمة المرور الجديدة *</label><input id="mpr_pass" type="text" placeholder="8 أحرف على الأقل"></div>'+
     '<div class="modal-actions"><button class="btn btn-primary" id="mprSubmit">تعيين الآن</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>';
   document.getElementById('modalBackdrop').style.display='flex';
   document.getElementById('mprSubmit').onclick = async ()=>{
     const errBox = document.getElementById('mprErr'); errBox.style.display='none';
     const pass = document.getElementById('mpr_pass').value;
-    if(!pass || pass.length<6){ errBox.textContent='كلمة المرور يجب ألا تقل عن 6 أحرف'; errBox.style.display='block'; return; }
+    if(!pass || pass.length<8){ errBox.textContent='كلمة المرور يجب ألا تقل عن 8 أحرف'; errBox.style.display='block'; return; }
     const btn=document.getElementById('mprSubmit'); btn.disabled=true; btn.textContent='جارٍ التنفيذ...';
     try{
-      const newUid = await createAuthUserSecondary(targetEmail, pass);
+      let newUid;
+      try{
+        const r = await callFn('adminSetPassword', {email:targetEmail, password:pass});
+        newUid = r.uid;
+      }catch(fe){
+        if(fe && fe.code==='functions/not-found'){
+          const role = kind==='user' ? (record.role||'employee') : 'family';
+          const r2 = await callFn('adminCreateUser', {email:targetEmail, password:pass, kind: kind==='user'?'staff':'family', role, name: record.name||record.guardianName||''});
+          newUid = r2.uid;
+        } else if(fe && fe.code==='functions/unavailable'){
+          newUid = await createAuthUserSecondary(targetEmail, pass);
+        } else { throw fe; }
+      }
       record.authUid = newUid;
       if(kind==='user'){
         record.email = targetEmail; if(record.password) delete record.password;
@@ -454,8 +488,10 @@ function openManualPasswordReset(record, kind){
           '1) افتح <a href="https://console.firebase.google.com/project/rawahem-system/authentication/users" target="_blank" style="color:var(--primary); text-decoration:underline;">Firebase Console ← Authentication ← Users</a><br>'+
           '2) ابحث عن البريد: <b>'+esc(targetEmail)+'</b> واحذف ذلك الحساب (⋮ ← Delete account)<br>'+
           '3) ارجع هنا واضغط "تعيين الآن" مرة أخرى';
-      } else if(e && e.code==='auth/weak-password'){
-        errBox.textContent='كلمة المرور ضعيفة جدًا، اختر كلمة أقوى (6 أحرف فأكثر)';
+      } else if(e && (e.code==='auth/weak-password' || e.code==='functions/invalid-argument')){
+        errBox.textContent=(e.message && e.code.startsWith('functions')) ? e.message : 'كلمة المرور ضعيفة جدًا، اختر كلمة أقوى (8 أحرف فأكثر)';
+      } else if(e && e.code==='functions/permission-denied'){
+        errBox.textContent='لا تملك صلاحية المدير الموثّقة بعد. سجّل الخروج ثم الدخول مرة أخرى وجرّب';
       } else {
         errBox.textContent='تعذّر تنفيذ العملية، تحقق من الاتصال وحاول مجددًا';
       }
@@ -598,6 +634,7 @@ async function doLogin(){
     currentUser = profile;
     await addAudit('تسجيل دخول', 'المستخدمون', profile.name);
     enterApp();
+    if(profile.role==='admin') ensureAdminClaims();
   }catch(e){
     console.error(e);
     errBox.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
@@ -1687,14 +1724,16 @@ function openUserModal(existing){
     {key:'name', label:'الاسم الكامل', required:true, full:true},
     {key:'username', label:'اسم المستخدم', required:true},
     {key:'email', label:'البريد الإلكتروني', required:true, hint:'يُستخدم لتسجيل الدخول ولإعادة تعيين كلمة المرور مستقبلًا'},
-    {key:'password', label:'كلمة المرور المبدئية', required:true, hint:'6 أحرف على الأقل — أبلغ المستخدم بها ليغيّرها لاحقًا'},
+    {key:'password', label:'كلمة المرور المبدئية', required:true, hint:'8 أحرف على الأقل — أبلغ المستخدم بها ليغيّرها لاحقًا'},
     {key:'role', label:'الدور', type:'select', options:Object.keys(ROLE_LABEL).map(k=>({value:k,label:ROLE_LABEL[k]})), required:true},
   ];
   openModal(existing?'تعديل مستخدم':'إضافة مستخدم جديد', fields, existing || {role:'employee'},
   async (vals)=>{
     if(DB.users.some(u=>u.username===vals.username && (!existing || u.id!==existing.id))){ toast('اسم المستخدم مستخدم مسبقًا','err'); return; }
     if(existing){
+      const roleChanged = existing.role!==vals.role;
       existing.name=vals.name; existing.username=vals.username; existing.role=vals.role;
+      if(roleChanged && existing.authUid){ try{ await callFn('adminSetRole', {uid:existing.authUid, role:vals.role}); }catch(e){ console.warn('setRole', e); toast('تم الحفظ لكن تعذّر تحديث الصلاحية الموثّقة','err'); } }
       if(vals.email) existing.email = vals.email;
       await saveKey('users'); await addAudit('تعديل مستخدم','المستخدمون', existing.name);
       toast('تم الحفظ بنجاح','ok'); navigate('users');
@@ -1702,12 +1741,19 @@ function openUserModal(existing){
       if(DB.users.some(u=>u.email===vals.email)){ toast('هذا البريد الإلكتروني مستخدم مسبقًا','err'); return; }
       let newUid;
       try{
-        newUid = await createAuthUserSecondary(vals.email, vals.password);
+        try{
+          const r = await callFn('adminCreateUser', {email:vals.email, password:vals.password, kind:'staff', role:vals.role, name:vals.name});
+          newUid = r.uid;
+        }catch(fe){
+          if(fe && fe.code==='functions/unavailable') newUid = await createAuthUserSecondary(vals.email, vals.password);
+          else throw fe;
+        }
       }catch(e){
         console.error(e);
         let msg = 'تعذر إنشاء حساب الدخول الآمن لهذا المستخدم';
-        if(e && e.code==='auth/email-already-in-use') msg = 'هذا البريد الإلكتروني مستخدم مسبقًا في نظام الدخول';
-        else if(e && e.code==='auth/weak-password') msg = 'كلمة المرور ضعيفة جدًا (6 أحرف على الأقل)';
+        if(e && (e.code==='auth/email-already-in-use' || e.code==='functions/already-exists')) msg = 'هذا البريد الإلكتروني مستخدم مسبقًا في نظام الدخول';
+        else if(e && (e.code==='auth/weak-password' || e.code==='functions/invalid-argument')) msg = 'كلمة المرور ضعيفة (8 أحرف على الأقل) أو البريد غير صالح';
+        else if(e && e.code==='functions/permission-denied') msg = 'لا تملك صلاحية المدير الموثّقة بعد. سجّل الخروج ثم الدخول وجرّب';
         else if(e && e.code==='auth/invalid-email') msg = 'صيغة البريد الإلكتروني غير صحيحة';
         toast(msg,'err'); return;
       }
