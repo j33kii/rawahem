@@ -291,7 +291,15 @@ async function doLogin(){
       if(profile){ profile.authUid = uidAuth; if(profile.password) delete profile.password; await saveKey('users'); }
     }
     if(!profile){
-      errBox.textContent='تم التحقق من الحساب، لكن لا يوجد ملف صلاحيات مرتبط به. تواصل مع مدير النظام';
+      /* حساب مدير موثّق بصلاحية admin ولا يوجد ملف مطابق: نربطه بملف المدير الوحيد */
+      try{
+        const tk = await cred.user.getIdTokenResult();
+        const admins = DB.users.filter(x=>x.role==='admin' && x.active);
+        if(tk.claims && tk.claims.role==='admin' && admins.length===1){ profile = admins[0]; profile.authUid = uidAuth; await saveKey('users'); }
+      }catch(e){ console.warn('admin link', e); }
+    }
+    if(!profile){
+      errBox.textContent='تم التحقق من الحساب، لكن لا يوجد ملف صلاحيات مرتبط به. تواصل مع مدير النظام ('+(cred.user.email||'')+' / '+DB.users.length+')';
       errBox.style.display='block';
       try{ await auth.signOut(); }catch(e){}
       return;
