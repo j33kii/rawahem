@@ -265,8 +265,8 @@ async function doLogin(){
   const btn=document.getElementById('loginBtn');
   btn.disabled=true; btn.textContent='جارٍ التحقق...';
   try{
-    const profileBefore = findProfileByLogin(uRaw);
-    const email = (profileBefore && profileBefore.email) ? profileBefore.email : usernameToEmail(uRaw);
+    const profileBefore = null; /* القراءة قبل تسجيل الدخول غير مسموحة — نشتق البريد من النص المكتوب فقط */
+    const email = (uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : usernameToEmail(uRaw));
     let cred;
     try{
       cred = await auth.signInWithEmailAndPassword(email, p);
@@ -283,7 +283,9 @@ async function doLogin(){
       }
     }
     const uidAuth = cred.user.uid;
+    await loadAll(); /* بعد الدخول فقط يُسمح بقراءة البيانات */
     let profile = DB.users.find(x=>x.authUid===uidAuth);
+    if(!profile){ profile = DB.users.find(x=>x.email && x.email.toLowerCase()===(cred.user.email||'').toLowerCase()) || DB.users.find(x=>x.authEmail && x.authEmail.toLowerCase()===(cred.user.email||'').toLowerCase()); if(profile){ profile.authUid=uidAuth; await saveKey('users'); } }
     if(!profile){
       profile = findProfileByLogin(uRaw);
       if(profile){ profile.authUid = uidAuth; if(profile.password) delete profile.password; await saveKey('users'); }
@@ -316,8 +318,7 @@ async function forgotPassword(){
   const uRaw=(document.getElementById('loginUser').value||'').trim();
   if(!uRaw){ toast('اكتب اسم المستخدم أو البريد الإلكتروني أولاً','err'); return; }
   if(!authReady){ toast('تعذّر الاتصال بنظام تسجيل الدخول الآمن','err'); return; }
-  const profile = findProfileByLogin(uRaw);
-  const email = (profile && profile.email) ? profile.email : usernameToEmail(uRaw);
+  const email = uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : usernameToEmail(uRaw);
   if(email.endsWith('@rawahem.local')){ toast('هذا الحساب ليس له بريد إلكتروني حقيقي بعد. اطلب من مدير النظام تحديثه','err'); return; }
   try{ await auth.sendPasswordResetEmail(email); toast('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني','ok'); }
   catch(e){ console.error(e); toast('تعذر إرسال رابط إعادة التعيين','err'); }
@@ -727,11 +728,11 @@ function renderAccount(c){
 }
 
 (async function boot(){
-  await loadAll();
   if(authReady){
     auth.onAuthStateChanged(async (user)=>{
       if(user && !currentUser){
-        let profile = DB.users.find(x=>x.authUid===user.uid);
+        await loadAll();
+        let profile = DB.users.find(x=>x.authUid===user.uid) || DB.users.find(x=>x.email && x.email.toLowerCase()===(user.email||'').toLowerCase());
         if(profile && profile.active){ currentUser = profile; enterApp(); }
         else if(profile && !profile.active){ try{ await auth.signOut(); }catch(e){} }
       }

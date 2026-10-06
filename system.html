@@ -441,7 +441,7 @@ async function createAuthUserSecondary(email, password){
    يجب حذفه أولًا يدويًا من Firebase Console قبل إعادة المحاولة. */
 function openManualPasswordReset(record, kind){
   const targetEmail = kind==='user'
-    ? ((record.email && !record.email.endsWith('@rawahem.local')) ? record.email : usernameToEmail(record.username))
+    ? (record.authEmail || usernameToEmail(record.username))
     : (record.authEmail || record.email || identifierToFamilyEmail(record.identifier));
   const box = document.getElementById('modalBox');
   box.innerHTML =
@@ -472,7 +472,7 @@ function openManualPasswordReset(record, kind){
       }
       record.authUid = newUid;
       if(kind==='user'){
-        record.email = targetEmail; if(record.password) delete record.password;
+        record.authEmail = targetEmail; if(record.password) delete record.password;
         await saveKey('users'); await addAudit('تعيين كلمة مرور يدويًا','المستخدمون', record.name);
       } else {
         record.authEmail = targetEmail; if(record.password) delete record.password;
@@ -595,8 +595,8 @@ async function doLogin(){
   const btn = document.getElementById('loginBtn');
   btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
   try{
-    const profileBefore = findProfileByLogin(uRaw);
-    const email = (profileBefore && profileBefore.email) ? profileBefore.email : usernameToEmail(uRaw);
+    const profileBefore = null; /* القراءة قبل تسجيل الدخول غير مسموحة — نشتق البريد من النص المكتوب فقط */
+    const email = (uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : usernameToEmail(uRaw));
     let cred;
     try{
       cred = await auth.signInWithEmailAndPassword(email, p);
@@ -614,7 +614,9 @@ async function doLogin(){
       }
     }
     const uidAuth = cred.user.uid;
+    await loadAll(); /* بعد الدخول فقط يُسمح بقراءة البيانات */
     let profile = DB.users.find(x=>x.authUid===uidAuth);
+    if(!profile){ profile = DB.users.find(x=>x.email && x.email.toLowerCase()===(cred.user.email||'').toLowerCase()) || DB.users.find(x=>x.authEmail && x.authEmail.toLowerCase()===(cred.user.email||'').toLowerCase()); if(profile){ profile.authUid=uidAuth; await saveKey('users'); } }
     if(!profile){
       profile = findProfileByLogin(uRaw);
       if(profile){ profile.authUid = uidAuth; if(profile.password) delete profile.password; await saveKey('users'); }
@@ -655,8 +657,7 @@ async function forgotPassword(){
   const uRaw = (document.getElementById('loginUser').value || '').trim();
   if(!uRaw){ toast('اكتب اسم المستخدم أو البريد الإلكتروني أولاً في الحقل أعلاه', 'err'); return; }
   if(!authReady){ toast('تعذّر الاتصال بنظام تسجيل الدخول الآمن', 'err'); return; }
-  const profile = findProfileByLogin(uRaw);
-  const email = (profile && profile.email) ? profile.email : usernameToEmail(uRaw);
+  const email = uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : usernameToEmail(uRaw);
   if(email.endsWith('@rawahem.local')){
     toast('هذا الحساب ليس له بريد إلكتروني حقيقي بعد. اطلب من مدير النظام تحديث بريدك من "المستخدمون"', 'err');
     return;
@@ -2065,12 +2066,12 @@ function renderDriveSync(c){
   if(!firebaseReady || firebaseConfig.apiKey.indexOf('PASTE_') === 0){
     document.getElementById('setupWarning').style.display = 'block';
   }
-  await loadAll();
   /* Firebase Authentication يحتفظ بجلسة الدخول تلقائيًا (localStorage) — عند إعادة فتح الصفحة نعيد الدخول تلقائيًا لنفس المستخدم */
   if(authReady){
     auth.onAuthStateChanged(async (user)=>{
       if(user && !currentUser){
-        let profile = DB.users.find(x=>x.authUid===user.uid);
+        await loadAll();
+        let profile = DB.users.find(x=>x.authUid===user.uid) || DB.users.find(x=>x.email && x.email.toLowerCase()===(user.email||'').toLowerCase());
         if(profile && profile.active){
           currentUser = profile;
           enterApp();

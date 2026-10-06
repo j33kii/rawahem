@@ -273,14 +273,14 @@ async function doLogin(){
   const btn=document.getElementById('loginBtn');
   btn.disabled=true; btn.textContent='جارٍ التحقق...';
   try{
-    const famBefore = findFamilyByLogin(uRaw);
-    if(!famBefore){ throw {code:'not-found'}; }
-    const email = famBefore.authEmail || identifierToFamilyEmail(famBefore.identifier);
+    /* القراءة قبل الدخول غير مسموحة — نشتق البريد من النص المكتوب فقط */
+    const famBefore = null;
+    const email = uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : identifierToFamilyEmail(uRaw);
     let cred;
     try{
       cred = await auth.signInWithEmailAndPassword(email, p);
     }catch(authErr){
-      if(famBefore.password && famBefore.password===p){
+      if(false){
         /* أول دخول لحساب أنشأه الإداري — ننشئ حساب Firebase الآن.
            نستخدم البريد الحقيقي إن وُجد (ليعمل "نسيت كلمة المرور" لاحقًا)، وإلا بريدًا مؤقتًا داخليًا. */
         const createEmail = famBefore.email || email;
@@ -294,8 +294,18 @@ async function doLogin(){
       }
     }
     const uidAuth = cred.user.uid;
+    await loadAll(); /* بعد الدخول فقط يُسمح بقراءة البيانات */
     let fam = DB.families.find(x=>x.authUid===uidAuth);
-    if(!fam){ fam = famBefore; fam.authUid = uidAuth; await saveKey('families'); }
+    if(!fam){
+      const em=(cred.user.email||'').toLowerCase();
+      fam = DB.families.find(x=>x.authEmail && x.authEmail.toLowerCase()===em) || findFamilyByLogin(uRaw) || DB.families.find(x=>x.email && x.email.toLowerCase()===em);
+      if(fam){ fam.authUid = uidAuth; await saveKey('families'); }
+    }
+    if(!fam){
+      errBox.textContent='تم التحقق من الحساب، لكن لا يوجد ملف أسرة مرتبط به. تواصل مع الجمعية'; errBox.style.display='block';
+      try{ await auth.signOut(); }catch(e){}
+      return;
+    }
     if(!fam.active){
       if(fam.selfRegistered && !fam.profileCompleted){
         currentUser = fam;
@@ -327,9 +337,7 @@ async function forgotPassword(){
   const uRaw=(document.getElementById('loginUser').value||'').trim();
   if(!uRaw){ toast('اكتب رقم الهوية أو الجوال أولاً','err'); return; }
   if(!authReady){ toast('تعذّر الاتصال بنظام تسجيل الدخول الآمن','err'); return; }
-  const fam = findFamilyByLogin(uRaw);
-  if(!fam){ toast('لم يتم العثور على حساب بهذا الرقم','err'); return; }
-  const targetEmail = fam.authEmail || fam.email;
+  const targetEmail = uRaw.indexOf('@')>-1 ? uRaw.toLowerCase() : '';
   if(!targetEmail){ toast('لا يوجد بريد إلكتروني حقيقي مسجَّل لهذا الحساب بعد. تواصل مع الجمعية لإعادة تعيين كلمة المرور يدويًا','err'); return; }
   try{ await auth.sendPasswordResetEmail(targetEmail); toast('تم إرسال رابط إعادة تعيين كلمة المرور إلى '+targetEmail,'ok'); }
   catch(e){
@@ -783,10 +791,10 @@ function renderMessagesPage(c){
   if(!firebaseReady || firebaseConfig.apiKey.indexOf('PASTE_') === 0){
     document.getElementById('setupWarning').style.display = 'block';
   }
-  await loadAll();
   if(authReady){
     auth.onAuthStateChanged(async (user)=>{
       if(user && !currentUser){
+        await loadAll();
         let fam = DB.families.find(x=>x.authUid===user.uid);
         if(fam && fam.active){ currentUser = fam; enterApp(); }
         else if(fam && !fam.active){ try{ await auth.signOut(); }catch(e){} }
