@@ -439,15 +439,21 @@ async function establishSession(){
   return CLAIMS;
 }
 /* للمدير: ترحيل البيانات القديمة (مرة واحدة) ثم ربط الصلاحيات */
-async function adminSetup(){
-  if(CLAIMS.role!=='admin' || !fns) return;
-  try{
-    const m = await callFn('adminMigrate');
-    if(!m.already){
-      try{ await callFn('adminSyncClaims'); }catch(e){ console.warn('syncClaims', e); }
-      toast('تم ترحيل البيانات إلى نظام الحماية الجديد','ok');
-    }
-  }catch(e){ console.warn('adminSetup', e && e.code, e && e.message); }
+let __setupP = null;
+function adminSetup(){
+  if(CLAIMS.role!=='admin' || !fns) return Promise.resolve();
+  if(__setupP) return __setupP;
+  __setupP = (async function(){
+    try{
+      const m = await callFn('adminMigrate');
+      window.__mig = m;
+      if(!m.already){
+        try{ await callFn('adminSyncClaims'); }catch(e){ console.warn('syncClaims', e); }
+        toast('تم ترحيل البيانات إلى نظام الحماية الجديد','ok');
+      }
+    }catch(e){ window.__migErr = (e && (e.code||'')+' '+(e && e.message||'')); console.warn('adminSetup', e && e.code, e && e.message); }
+  })();
+  return __setupP;
 }
 async function ensureAdminClaims(){ /* للتوافق — لم يعد مستخدمًا */ }
 
@@ -570,7 +576,7 @@ async function loadKey(name, seedFn){
       if(CLAIMS.role==='admin') await saveKey(name);
     }
   }catch(e){
-    console.error('loadKey failed', name, e);
+    console.error('loadKey failed', name, e); (window.__loadErr=window.__loadErr||[]).push(name+': '+(e&&(e.code||e.message)));
     DB[name] = (REC_KEYS.indexOf(name) > -1) ? [] : seed();
   }
 }
@@ -698,6 +704,7 @@ async function doLogin(){
     }
     await adminSetup();
     await loadAll(); /* بعد الدخول فقط يُسمح بقراءة البيانات */
+    if(CLAIMS.role==='admin' && !DB.users.length){ await new Promise(r=>setTimeout(r,2500)); await loadAll(); }
     let profile = DB.users.find(x=>x.authUid===uidAuth);
     if(!profile){ profile = DB.users.find(x=>x.email && x.email.toLowerCase()===(cred.user.email||'').toLowerCase()) || DB.users.find(x=>x.authEmail && x.authEmail.toLowerCase()===(cred.user.email||'').toLowerCase()); if(profile && CLAIMS.role==='admin'){ profile.authUid=uidAuth; await saveKey('users'); } }
     if(!profile){
@@ -713,7 +720,7 @@ async function doLogin(){
       }catch(e){ console.warn('admin link', e); }
     }
     if(!profile){
-      errBox.textContent = 'تم التحقق من الحساب، لكن لا يوجد ملف صلاحيات مرتبط به. تواصل مع مدير النظام ('+(cred.user.email||'')+' / '+DB.users.length+')';
+      errBox.textContent = 'تم التحقق من الحساب، لكن لا يوجد ملف صلاحيات مرتبط به. تواصل مع مدير النظام ('+(cred.user.email||'')+' / '+DB.users.length+(window.__migErr?' / '+window.__migErr:'')+(window.__mig&&window.__mig.counts?' / '+JSON.stringify(window.__mig.counts):(window.__mig&&window.__mig.already?' / already':''))+((window.__loadErr||[]).length?' / '+window.__loadErr.join(','):'')+')';
       errBox.style.display = 'block';
       try{ await auth.signOut(); }catch(e){}
       return;
